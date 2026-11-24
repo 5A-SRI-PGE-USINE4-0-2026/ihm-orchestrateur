@@ -1,83 +1,30 @@
-# Orchestrateur L1 et IHM — Usine 4.0 Salle 315 (MFJA)
+# IHM de supervision et orchestrateur L1 de la salle 315
 
-Ensemble **Orchestrateur ROS 2 (Lot L1)** + **IHM de supervision en lecture seule (Lot L7 / FP4)** pour la cellule collaborative et reconfigurable de la **Salle 315 MFJA (UPSSITECH SRI)**.
+L’IHM web du projet Usine 4.0 de la MFJA affiche l’état de la cellule, la progression du cycle et les anomalies. Le superviseur L1 exécute des scénarios de démonstration commandés depuis le terminal ou, avec ROS 2 Jazzy, depuis un topic dédié. L’IHM est en lecture seule dans les deux cas.
 
-## Architecture et séparation des rôles
+![Vue Cellule pendant le convoyage J1. La navette Montrac A est sélectionnée et l’étape active apparaît dans le panneau de droite.](docs/images/cellule-j1.png)
 
-```text
-Terminal opérateur / topic ROS 2 (/mfja/orchestrator/cli_command)
-        │
-        ▼
-[Orchestrateur L1 — mfja_orchestrator (ROS 2 Jazzy)]
-  • Machine à états déterministe (IDLE / RUNNING / FAULT_LOCKED)
-  • Préconditions & chien de garde Montrac (seuil 500 ms -> on_deactivate)
-  • Séquences reconfigurables YAML (J1, J1 alternatif §3.4, J2 TIAGo)
-  • Validateur J3 fail-closed (domaine PDDL salle315_domain.pddl)
-        │
-        ├──► Topics ROS 2 natifs (/mfja/supervisor/cell_state, /zone_a/..., /tiago/...)
-        └──► Pont WebSocket rosbridge v2 LECTURE SEULE (ws://0.0.0.0:9090)
-                    │  (publish / call_service refusés côté client ET côté serveur)
-                    ▼
-           [IHM web — affichage seul]
-```
+*Cycle J1 de démonstration alimenté par l’orchestrateur Python en mode autonome. Les poses et états visibles sont synthétiques.*
 
-## Démarrage rapide (2 terminaux)
+## Voir l’IHM en deux minutes
 
-### Terminal 1 — Lancer l'orchestrateur L1 (ROS 2 Jazzy)
+Depuis la racine du dépôt, avec Node.js et npm disponibles (vérifié avec Node.js 24) :
 
 ```bash
-cd /home/tiago/Documents/PGE_ihm
-npm run orchestrator
-```
-
-Commandes disponibles dans le terminal de l'orchestrateur :
-
-```text
-start j1 [--loop]        Lancer le scénario J1 intra-zone (Zone A)
-start j1_alt [--loop]    Lancer le scénario J1 reconfiguré (§3.4)
-start j2 [--loop]        Lancer le transfert inter-zones TIAGo
-propose <consigne>       Tester le validateur J3 fail-closed
-                         ex: propose envoie le cube en zone B par le montrac  -> REJETÉ
-                         ex: propose fais un cycle en zone A                  -> VALIDÉ
-env real | gazebo        Basculer gz_sim:=false / gz_sim:=true
-fault estop | watchdog   Simuler un arrêt d'urgence ou une perte watchdog Montrac
-reset                    Acquitter après réarmement sécurité
-stop                     Arrêter proprement le cycle en cours
-status                   Afficher l'état courant
-```
-
-On peut également piloter l'orchestrateur depuis un autre terminal ROS 2 :
-
-```bash
-ros2 topic pub --once /mfja/orchestrator/cli_command std_msgs/msg/String "{data: 'start j1'}"
-```
-
-### Terminal 2 — Lancer l'IHM (lecture seule)
-
-```bash
-cd /home/tiago/Documents/PGE_ihm
+npm ci
 npm run dev
 ```
 
-Ouvrir `http://localhost:5173`. L'IHM se connecte automatiquement en lecture seule à `ws://localhost:9090` (configurable sans valeur codée en dur dans [`public/config.json`](public/config.json) ou via l'onglet **ROS 2**).
+Ouvrir [localhost:5173](http://localhost:5173), puis cliquer sur **Passer en démo locale**. La barre du bas permet de choisir **J1**, **J1 alt**, **J2 TIAGo**, **J3 VLA** ou **Défaut**, et de suspendre la trace avec **Pause**. Sous PowerShell, utiliser `npm.cmd` si l’exécution des scripts `.ps1` est désactivée.
 
-## Construction en paquet ROS 2 (`colcon`)
+Pour piloter un cycle de démonstration au terminal et suivre ses états dans l’IHM, démarrer ensuite l’orchestrateur en [mode autonome](docs/guide-utilisation.md#lancer-lorchestrateur-en-mode-autonome).
 
-Le paquet [`ros2_ws/src/mfja_orchestrator`](ros2_ws/src/mfja_orchestrator) est un paquet `ament_python` standard :
+## Documentation
 
-```bash
-cd /home/tiago/Documents/PGE_ihm/ros2_ws
-source /opt/ros/jazzy/setup.bash
-colcon build --packages-select mfja_orchestrator
-source install/setup.bash
-ros2 launch mfja_orchestrator orchestrator.launch.py gz_sim:=false
-```
+| Document | Contenu |
+| --- | --- |
+| [Guide d’utilisation et d’essai](docs/guide-utilisation.md) | Installation Windows et Linux, écrans, commandes, essais J1 et J3, défaut et réarmement, lancement ROS 2 et dépannage. |
+| [Architecture et choix techniques](docs/architecture.md) | Flux de données, séquences YAML, contrat ROS 2 et WebSocket, limites et correspondance avec le cahier des charges. |
+| [Vidéo de démonstration](docs/images/demonstration-ihm.webm) | Capture de l’IHM connectée au pont local. Elle montre un cycle J1, un rejet J3, un défaut simulé et le retour à l’attente. |
 
-## Fichiers clés
-
-- Configuration orchestrateur (scénarios, topics, seuils, réseau) : [`ros2_ws/src/mfja_orchestrator/config/cell_config.yaml`](ros2_ws/src/mfja_orchestrator/config/cell_config.yaml)
-- Domaine PDDL PlanSys2 Salle 315 : [`ros2_ws/src/mfja_orchestrator/pddl/salle315_domain.pddl`](ros2_ws/src/mfja_orchestrator/pddl/salle315_domain.pddl)
-- Superviseur L1 déterministe : [`ros2_ws/src/mfja_orchestrator/mfja_orchestrator/supervisor.py`](ros2_ws/src/mfja_orchestrator/mfja_orchestrator/supervisor.py)
-- Pont WebSocket lecture seule : [`ros2_ws/src/mfja_orchestrator/mfja_orchestrator/ws_bridge.py`](ros2_ws/src/mfja_orchestrator/mfja_orchestrator/ws_bridge.py)
-- Nœud ROS 2 Jazzy : [`ros2_ws/src/mfja_orchestrator/mfja_orchestrator/orchestrator_node.py`](ros2_ws/src/mfja_orchestrator/mfja_orchestrator/orchestrator_node.py)
-- Configuration IHM : [`public/config.json`](public/config.json)
+Les deux modes de démonstration utilisent des données synthétiques. Le mode ROS 2 natif publie ces mêmes données sur le graphe ROS. Les essais dans Gazebo et sur le plateau font partie de l’intégration décrite dans le dossier de spécifications.
