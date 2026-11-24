@@ -1,0 +1,126 @@
+# Configuration externalisée de l'orchestrateur L1 — Salle 315 MFJA (FC2 : aucune valeur en dur)
+cell:
+  name: "Cellule Usine 4.0 — Salle 315"
+  facility: "Maison de la Formation Jacqueline Auriol (UPSSITECH SRI)"
+  gz_sim: false # false = plateau réel, true = jumeau numérique Gazebo Harmonic
+  target_batch_cycles: 20
+
+network:
+  ws_host: "0.0.0.0"
+  ws_port: 9090
+  publish_rate_hz: 10.0
+
+safety:
+  montrac_watchdog_timeout_ms: 500
+  require_explicit_reset: true
+
+topics:
+  cell_state: "/mfja/supervisor/cell_state"
+  cycle_status: "/mfja/supervisor/cycle_status"
+  supervisor_events: "/mfja/supervisor/events"
+  safety_status: "/mfja/safety/status"
+  yaskawa_a_state: "/zone_a/yaskawa_hc10dt/joint_states"
+  yaskawa_b_state: "/zone_b/yaskawa_hc10/joint_states"
+  montrac_a_state: "/zone_a/montrac/shuttle_state"
+  montrac_b_state: "/zone_b/montrac/shuttle_state"
+  tiago_pose: "/tiago/amcl_pose"
+  vla_plan: "/mfja/vla/candidate_plan"
+  camera_a_info: "/zone_a/camera/scene_summary"
+  camera_b_info: "/zone_b/camera/scene_summary"
+  cli_command: "/mfja/orchestrator/cli_command"
+
+hardware:
+  montrac_speed_mm_s: 185
+  stations:
+    blue: 0.06
+    green: 0.24
+    red: 0.74
+    yellow: 0.56
+
+# Séquences reconfigurables (FP6 / V4 §3.4) — réutilisation des mêmes briques primitives
+scenarios:
+  j1:
+    code: "J1"
+    title: "J1 — chaîne réelle intra-zone (Zone A)"
+    description: "Prise cube Yaskawa HC10DT, dépose navette Montrac N1, convoyage Bleu vers Vert, puis reprise."
+    steps:
+      - action: "check_preconditions"
+        label: "Vérification des préconditions"
+        owner: "Superviseur L1"
+        duration_s: 1.4
+      - action: "yaskawa_a_pick_table"
+        label: "Prise du cube par Yaskawa HC10DT"
+        owner: "Yaskawa HC10DT"
+        duration_s: 3.2
+      - action: "yaskawa_a_place_blue"
+        label: "Dépose sur la navette Montrac N1 (Bleu)"
+        owner: "Yaskawa HC10DT"
+        duration_s: 3.0
+      - action: "montrac_a_blue_to_green"
+        label: "Convoyage Montrac A (Bleu vers Vert)"
+        owner: "Montrac Zone A"
+        duration_s: 4.5
+      - action: "yaskawa_a_pick_green_to_table"
+        label: "Reprise en station Verte et retour table"
+        owner: "Yaskawa HC10DT"
+        duration_s: 3.6
+      - action: "montrac_a_return_blue"
+        label: "Repositionnement navette N1 en station Bleue"
+        owner: "Montrac Zone A"
+        duration_s: 2.8
+
+  j1_alt:
+    code: "J1-ALT"
+    title: "J1 alternatif — preuve de reconfigurabilité (§3.4)"
+    description: "Mêmes pilotes ros2_control, enchaînement inversé : déplacement navette avant prise et dépose."
+    steps:
+      - action: "check_preconditions"
+        label: "Vérification des préconditions"
+        owner: "Superviseur L1"
+        duration_s: 1.2
+      - action: "montrac_a_blue_to_green_empty"
+        label: "Déplacement préalable navette N1 vers Vert"
+        owner: "Montrac Zone A"
+        duration_s: 3.8
+      - action: "yaskawa_a_pick_and_place_green"
+        label: "Prise cube et dépose directe en station Verte"
+        owner: "Yaskawa HC10DT"
+        duration_s: 3.8
+      - action: "montrac_a_green_to_blue_loaded"
+        label: "Convoyage retour vers la station Bleue"
+        owner: "Montrac Zone A"
+        duration_s: 4.0
+      - action: "yaskawa_a_pick_blue_to_table"
+        label: "Reprise finale en station Bleue"
+        owner: "Yaskawa HC10DT"
+        duration_s: 3.2
+
+  j2:
+    code: "J2"
+    title: "J2 — transfert inter-zones via TIAGo (cible conditionnelle)"
+    description: "Zone A vers Zone B via navigation mobile TIAGo (Nav2) dans le couloir central."
+    steps:
+      - action: "check_preconditions_j2"
+        label: "Préconditions Zone A, couloir et Zone B"
+        owner: "Superviseur L1"
+        duration_s: 1.4
+      - action: "yaskawa_a_pick_and_place_blue"
+        label: "Chargement du cube sur Montrac A"
+        owner: "Yaskawa HC10DT"
+        duration_s: 3.4
+      - action: "montrac_a_blue_to_green"
+        label: "Convoyage Zone A vers point de transfert"
+        owner: "Montrac Zone A"
+        duration_s: 3.6
+      - action: "tiago_transit_a_to_b"
+        label: "Transit inter-zones par TIAGo (Nav2)"
+        owner: "TIAGo (Nav2)"
+        duration_s: 5.5
+      - action: "montrac_b_blue_to_green"
+        label: "Convoyage Zone B vers poste de reprise"
+        owner: "Montrac Zone B"
+        duration_s: 3.6
+      - action: "yaskawa_b_unload_to_table"
+        label: "Reprise finale et dépose poste B"
+        owner: "Yaskawa HC10"
+        duration_s: 3.4

@@ -1,0 +1,45 @@
+:root {
+  /* Mode sombre industriel (graphite-acier, sans noir pur ni néon criard) */
+  --bg-hall: #11171e;
+  --bg-panel: #171f29;
+  --bg-recessed: #0e141b;
+  --bg-subtle: #1e2835;
+  --bg-elevated: #232f3e;
+
+  --ink-primary: #e8eef5;
+  --ink-secondary: #99a9ba;
+  --ink-muted: #687a8c;
+
+  --border-structural: #273342;
+  --border-subtle: #1f2a37;
+
+  /* Signaux fonctionnels lisibles sur fond sombre */
+  --accent-yaskawa: #4e93e6;
+  --accent-yaskawa-soft: rgba(78, 147, 230, 0.14);
+
+  --signal-ok: #38b87c;
+  --signal-ok-soft: rgba(56, 184, 124, 0.14);
+
+  --signal-shuttle: #ebb52a;
+  --signal-shuttle-fill: #e3aa16;
+  --signal-shuttle-soft: rgba(235, 181, 42, 0.14);
+
+  --signal-fault: #e55353;
+  --signal-fault-soft: rgba(229, 83, 83, 0.16);
+
+  --signal-standby: #8192a4;
+  --signal-standby-soft: rgba(129, 146, 164, 0.12);
+
+  /* Typographie */
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: 3px;
+  --radius-md: 5px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+}

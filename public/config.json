@@ -1,0 +1,22 @@
+{
+  "cellName": "Cellule Usine 4.0 — Salle 315",
+  "facility": "Maison de la Formation Jacqueline Auriol (UPSSITECH SRI)",
+  "readOnly": true,
+  "defaultMode": "rosbridge",
+  "rosbridgeUrl": "ws://localhost:9090",
+  "reconnectIntervalMs": 2500,
+  "topics": {
+    "cellState": "/mfja/supervisor/cell_state",
+    "cycleStatus": "/mfja/supervisor/cycle_status",
+    "supervisorEvents": "/mfja/supervisor/events",
+    "safetyStatus": "/mfja/safety/status",
+    "yaskawaAState": "/zone_a/yaskawa_hc10dt/joint_states",
+    "yaskawaBState": "/zone_b/yaskawa_hc10/joint_states",
+    "montracAState": "/zone_a/montrac/shuttle_state",
+    "montracBState": "/zone_b/montrac/shuttle_state",
+    "tiagoPose": "/tiago/amcl_pose",
+    "vlaPlan": "/mfja/vla/candidate_plan",
+    "cameraAInfo": "/zone_a/camera/scene_summary",
+    "cameraBInfo": "/zone_b/camera/scene_summary"
+  }
+}

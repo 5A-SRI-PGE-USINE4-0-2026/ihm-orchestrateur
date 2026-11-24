@@ -1,0 +1,26 @@
+{
+  "name": "mfja-salle315-ihm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "IHM de supervision en lecture seule et orchestrateur ROS 2 L1 — Salle 315 MFJA (UPSSITECH SRI)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "orchestrator": "python3 scripts/run_orchestrator.py",
+    "orchestrator:j1": "python3 scripts/run_orchestrator.py --auto-start j1 --loop"
+  },
+  "dependencies": {
+    "lucide-react": "^0.460.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

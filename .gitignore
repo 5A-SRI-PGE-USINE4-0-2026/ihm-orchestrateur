@@ -1,0 +1,23 @@
+# Node / Vite
+node_modules/
+dist/
+*.local
+tsconfig.tsbuildinfo
+
+# ROS 2 / colcon
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Documents locaux
+*.docx
+
+# OS / éditeurs
+.DS_Store
+.vscode/
+.idea/
