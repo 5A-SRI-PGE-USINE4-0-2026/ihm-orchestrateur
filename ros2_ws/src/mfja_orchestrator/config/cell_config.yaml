@@ -2,13 +2,24 @@
 cell:
   name: "Cellule Usine 4.0 — Salle 315"
   facility: "Maison de la Formation Jacqueline Auriol (UPSSITECH SRI)"
-  gz_sim: false # false = plateau réel, true = jumeau numérique Gazebo Harmonic
+  gz_sim: true # true = jumeau numérique Gazebo Harmonic, false = plateau réel
   target_batch_cycles: 20
+
+topology:
+  inter_bloc_link: "tiago" # Liaison exclusive Bloc A <-> Bloc B assurée par PAL TIAGo (aucun convoyeur inter-blocs)
+  inter_bloc_conveyor: false
+  tiago_model: "PAL Robotics TIAGo (7-DOF + Parallel Gripper)"
+  tiago_transfer_mission: "PICK_POSTE_A_DELIVER_POSTE_B"
+  central_bay_waypoint: "bay_center"
+  poste_a_handoff_anchor: "poste_a_out"
+  poste_b_handoff_anchor: "poste_b_in"
 
 network:
   ws_host: "0.0.0.0"
   ws_port: 9090
-  publish_rate_hz: 10.0
+  hmi_http_url: "http://localhost:8080"
+  publish_rate_hz: 20.0
+  allow_ws_commands: true
 
 safety:
   montrac_watchdog_timeout_ms: 500
@@ -29,6 +40,47 @@ topics:
   camera_b_info: "/zone_b/camera/scene_summary"
   cli_command: "/mfja/orchestrator/cli_command"
 
+usine40_topics:
+  kpi: "/usine40/kpi"
+  safety_status: "/usine40/safety/status"
+  human_pose: "/usine40/safety/human_pose"
+  stations_status: "/usine40/stations/status"
+  montrac_status: "/usine40/montrac/status"
+  tiago_status: "/usine40/tiago/status"
+  workpieces_states: "/usine40/workpieces/states"
+  active_workpiece: "/usine40/workpieces/active_state"
+  tiago_world_pose: "/usine40/tiago/world_pose"
+  tiago_cmd_vel: "/tiago1/cmd_vel"
+  tiago_odom: "/tiago1/odom"
+  tiago_joint_states: "/tiago1/joint_states"
+  tiago_joint_trajectory: "/tiago1/joint_trajectory"
+  tiago_gripper_cmd: "/tiago1/gripper/position_command"
+  yaskawa_a_joints: "/yaskawa_hc10dt_1/joint_states"
+  yaskawa_a_traj: "/yaskawa_hc10dt_1/joint_trajectory"
+  yaskawa_a_gripper_cmd: "/yaskawa_hc10dt_1/gripper/position_command"
+  yaskawa_b_joints: "/yaskawa_hc10_1/joint_states"
+  yaskawa_b_traj: "/yaskawa_hc10_1/joint_trajectory"
+  yaskawa_b_gripper_cmd: "/yaskawa_hc10_1/gripper/position_command"
+  staubli_joints: "/staubli1/joint_states"
+  staubli_traj: "/staubli1/joint_trajectory"
+  staubli_gripper_cmd: "/staubli1/gripper/position_command"
+  shuttle_left_state: "/room_315/rails/left/shuttles/state"
+  shuttle_right_state: "/room_315/rails/right/shuttles/state"
+  inspection_a: "/usine40/perception/poste_a/result"
+  inspection_b: "/usine40/perception/poste_b/result"
+  traceability: "/usine40/traceability"
+  nl_proposals: "/usine40/nl/proposals"
+
+usine40_services:
+  start_order: "/usine40/supervision/start_order"
+  pause: "/usine40/supervision/pause"
+  reset: "/usine40/supervision/reset"
+  estop: "/usine40/safety/estop"
+  human_presence: "/usine40/safety/set_human_presence"
+  nl_parse: "/usine40/nl/parse"
+  nl_approve: "/usine40/nl/approve"
+  inspect_part: "/usine40/perception/inspect"
+
 hardware:
   montrac_speed_mm_s: 185
   stations:
@@ -37,58 +89,58 @@ hardware:
     red: 0.74
     yellow: 0.56
 
-# Séquences reconfigurables (FP6 / V4 §3.4) — réutilisation des mêmes briques primitives
+# Séquences reconfigurables — aucun convoyeur entre Bloc A et Bloc B (TIAGo assure exclusivement A -> B)
 scenarios:
   j1:
     code: "J1"
-    title: "J1 — chaîne réelle intra-zone (Zone A)"
-    description: "Prise cube Yaskawa HC10DT, dépose navette Montrac N1, convoyage Bleu vers Vert, puis reprise."
+    title: "J1 — chaîne intra-bloc (Bloc A)"
+    description: "Prise cube Yaskawa HC10DT, dépose navette locale Montrac N1, convoyage intra-bloc Bleu vers Vert, puis reprise."
     steps:
       - action: "check_preconditions"
-        label: "Vérification des préconditions"
+        label: "Vérification des préconditions sécurité"
         owner: "Superviseur L1"
         duration_s: 1.4
       - action: "yaskawa_a_pick_table"
-        label: "Prise du cube par Yaskawa HC10DT"
+        label: "Prise de la pièce par Yaskawa HC10DT (Bloc A)"
         owner: "Yaskawa HC10DT"
         duration_s: 3.2
       - action: "yaskawa_a_place_blue"
-        label: "Dépose sur la navette Montrac N1 (Bleu)"
+        label: "Dépose sur navette locale Montrac N1 (Bleu)"
         owner: "Yaskawa HC10DT"
         duration_s: 3.0
       - action: "montrac_a_blue_to_green"
-        label: "Convoyage Montrac A (Bleu vers Vert)"
-        owner: "Montrac Zone A"
+        label: "Convoyage local Bloc A (Bleu vers Vert)"
+        owner: "Montrac Bloc A"
         duration_s: 4.5
       - action: "yaskawa_a_pick_green_to_table"
-        label: "Reprise en station Verte et retour table"
+        label: "Reprise en station Verte et retour table Bloc A"
         owner: "Yaskawa HC10DT"
         duration_s: 3.6
       - action: "montrac_a_return_blue"
         label: "Repositionnement navette N1 en station Bleue"
-        owner: "Montrac Zone A"
+        owner: "Montrac Bloc A"
         duration_s: 2.8
 
   j1_alt:
     code: "J1-ALT"
-    title: "J1 alternatif — preuve de reconfigurabilité (§3.4)"
-    description: "Mêmes pilotes ros2_control, enchaînement inversé : déplacement navette avant prise et dépose."
+    title: "J1 alternatif — preuve de reconfigurabilité intra-bloc (§3.4)"
+    description: "Mêmes pilotes ros2_control en Bloc A, enchaînement inversé : déplacement navette locale avant prise et dépose."
     steps:
       - action: "check_preconditions"
-        label: "Vérification des préconditions"
+        label: "Vérification des préconditions sécurité"
         owner: "Superviseur L1"
         duration_s: 1.2
       - action: "montrac_a_blue_to_green_empty"
         label: "Déplacement préalable navette N1 vers Vert"
-        owner: "Montrac Zone A"
+        owner: "Montrac Bloc A"
         duration_s: 3.8
       - action: "yaskawa_a_pick_and_place_green"
-        label: "Prise cube et dépose directe en station Verte"
+        label: "Prise pièce et dépose directe en station Verte"
         owner: "Yaskawa HC10DT"
         duration_s: 3.8
       - action: "montrac_a_green_to_blue_loaded"
-        label: "Convoyage retour vers la station Bleue"
-        owner: "Montrac Zone A"
+        label: "Convoyage local retour vers station Bleue"
+        owner: "Montrac Bloc A"
         duration_s: 4.0
       - action: "yaskawa_a_pick_blue_to_table"
         label: "Reprise finale en station Bleue"
@@ -97,30 +149,22 @@ scenarios:
 
   j2:
     code: "J2"
-    title: "J2 — transfert inter-zones via TIAGo (cible conditionnelle)"
-    description: "Zone A vers Zone B via navigation mobile TIAGo (Nav2) dans le couloir central."
+    title: "J2 — transfert Bloc A → Bloc B exclusivement par PAL TIAGo (baie centrale)"
+    description: "Assemblage Bloc A (poste_a_out côté baie centrale), transit sans collision carter par PAL TIAGo via bay_center (PICK_POSTE_A_DELIVER_POSTE_B), conditionnement & contrôle qualité ZED 2 en Bloc B."
     steps:
       - action: "check_preconditions_j2"
-        label: "Préconditions Zone A, couloir et Zone B"
+        label: "Préconditions Bloc A, couloir TIAGo et Bloc B"
         owner: "Superviseur L1"
         duration_s: 1.4
-      - action: "yaskawa_a_pick_and_place_blue"
-        label: "Chargement du cube sur Montrac A"
+      - action: "yaskawa_a_stage_handoff"
+        label: "Op1 HC10DT & mise à disposition point d'échange TIAGo (poste_a_out)"
         owner: "Yaskawa HC10DT"
-        duration_s: 3.4
-      - action: "montrac_a_blue_to_green"
-        label: "Convoyage Zone A vers point de transfert"
-        owner: "Montrac Zone A"
         duration_s: 3.6
       - action: "tiago_transit_a_to_b"
-        label: "Transit inter-zones par TIAGo (Nav2)"
-        owner: "TIAGo (Nav2)"
+        label: "Transport exclusif Bloc A → Bloc B par TIAGo (PICK_POSTE_A_DELIVER_POSTE_B)"
+        owner: "TIAGo"
         duration_s: 5.5
-      - action: "montrac_b_blue_to_green"
-        label: "Convoyage Zone B vers poste de reprise"
-        owner: "Montrac Zone B"
-        duration_s: 3.6
       - action: "yaskawa_b_unload_to_table"
-        label: "Reprise finale et dépose poste B"
-        owner: "Yaskawa HC10"
-        duration_s: 3.4
+        label: "Prise en poste_b_in, conditionnement Op2 HC10 & contrôle qualité ZED 2"
+        owner: "Yaskawa HC10 + ZED 2"
+        duration_s: 4.0

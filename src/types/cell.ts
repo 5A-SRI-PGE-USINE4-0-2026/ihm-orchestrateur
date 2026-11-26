@@ -35,9 +35,10 @@ export type DemoScenarioId =
 export interface RosConfig {
   cellName: string;
   facility: string;
-  readOnly: true;
+  readOnly: boolean;
   defaultMode: TelemetrySourceMode;
   rosbridgeUrl: string;
+  hmiHttpUrl?: string;
   reconnectIntervalMs: number;
   topics: {
     cellState: string;
@@ -69,6 +70,7 @@ export interface ArmTelemetry {
   jointsDeg: [number, number, number, number, number, number];
   controllerLayer: string;
   hardwareInterface: string;
+  commandTopic?: string;
   rosTopic: string;
 }
 
@@ -93,15 +95,22 @@ export interface MontracTelemetry {
 export interface MobileRobotTelemetry {
   id: 'tiago';
   name: string;
+  model?: string;
   status: EquipmentStatus;
   actionLabel: string;
-  /** 0 = parked top corridor, 0.25 = Zone A handover, 0.75 = Zone B handover, 1 = dispatch */
+  /** 0.05 = stock, 0.25 = Poste A central bay, 0.50 = bay_center, 0.75 = Poste B central bay, 0.95 = expedition */
   corridorProgress: number;
   carryingPart: boolean;
   batteryPct: number;
+  headingRad?: number;
+  cmdVel?: { linearX: number; angularZ: number };
+  torsoLiftM?: number;
+  armJointsDeg?: number[];
+  gripperOpeningM?: number;
   navStack: string;
   hardwareInterface: string;
   rosTopic: string;
+  controlTopics?: string[];
 }
 
 export interface StandbyRobotTelemetry {
@@ -152,6 +161,8 @@ export interface SupervisorEvent {
 }
 
 export interface VlaPlanCandidate {
+  proposalId?: string;
+  proposalStatus?: string;
   naturalLanguageRequest: string;
   sceneObservation: string;
   pddlGoal: string;
@@ -191,6 +202,10 @@ export interface KpiSummary {
   rejectedCommands: number;
   recentCycles: CycleRecord[];
   cycleTimeSeriesS: number[];
+  oeeTrsPct?: number;
+  partsReworked?: number;
+  partsScrapped?: number;
+  wipCount?: number;
 }
 
 export interface RosTopicMetric {
@@ -201,12 +216,62 @@ export interface RosTopicMetric {
   active: boolean;
 }
 
+export interface InspectionSummary {
+  station_id?: string;
+  inspection_phase?: string;
+  part_id?: string;
+  part_detected?: boolean;
+  conforming?: boolean;
+  defect_type?: string;
+  confidence?: number;
+  orientation_deg?: number;
+  summary?: string;
+}
+
+export interface ShuttleWorldPose {
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  speed: number;
+  currentSegment?: string;
+}
+
+export interface LiveSimTelemetry {
+  simConnected: boolean;
+  lineState: string;
+  paused: boolean;
+  activeBatchId: string;
+  humanInCollabZone: boolean;
+  humanDistanceM: number;
+  tiagoSpeedScale: number;
+  tiagoWorldPose?: { x: number; y: number; z: number; yaw: number };
+  tiagoCmdVel?: { linearX: number; angularZ: number };
+  tiagoTorsoLiftM?: number;
+  tiagoGripperM?: number;
+  humanWorldPose?: { x: number; y: number; z: number; yaw: number };
+  shuttles?: {
+    left?: ShuttleWorldPose;
+    right?: ShuttleWorldPose;
+  };
+  staubliJointsDeg?: [number, number, number, number, number, number];
+  activeWorkpiece?: Record<string, unknown>;
+  workpieces?: Array<Record<string, unknown>>;
+  qcPosteA?: InspectionSummary;
+  qcPosteB?: InspectionSummary;
+  hmiHttpUrl?: string;
+}
+
 export interface CellSnapshot {
   timestamp: string;
   environment: ExecutionEnvironment;
   gzSimFlag: boolean;
+  simConnected?: boolean;
+  interBlocLink?: 'tiago';
+  hmiHttpUrl?: string;
   orchestratorState: 'RUNNING' | 'IDLE' | 'VALIDATING' | 'FAULT_LOCKED';
-  activeScenarioCode: 'J1' | 'J1-ALT' | 'J2' | 'J3';
+  activeScenarioCode: string;
   activeScenarioTitle: string;
   activeScenarioDescription: string;
   cycleNumber: number;
@@ -233,5 +298,6 @@ export interface CellSnapshot {
   events: SupervisorEvent[];
   vlaCandidate: VlaPlanCandidate;
   kpis: KpiSummary;
+  liveSim?: LiveSimTelemetry;
   rosTopics: RosTopicMetric[];
 }

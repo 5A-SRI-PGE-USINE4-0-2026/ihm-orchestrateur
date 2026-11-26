@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import type {
   CellSnapshot,
   ConnectionState,
@@ -7,6 +7,7 @@ import type {
 } from '../types/cell';
 
 interface ArchitectureViewProps {
+  headingRef?: React.RefObject<HTMLHeadingElement>;
   snapshot: CellSnapshot;
   config: RosConfig;
   sourceMode: TelemetrySourceMode;
@@ -17,15 +18,14 @@ interface ArchitectureViewProps {
 }
 
 export const ArchitectureView: React.FC<ArchitectureViewProps> = ({
+  headingRef,
   snapshot,
   config,
-  sourceMode,
-  connectionState,
-  connectionDetail,
   onSaveRosbridgeUrl,
   onChangeSourceMode,
 }) => {
   const [urlDraft, setUrlDraft] = useState(config.rosbridgeUrl);
+  const urlInputId = useId();
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -38,25 +38,23 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({
   return (
     <div className="page-container">
       <section className="panel-block">
-        <div className="panel-header">
-          <h2 className="section-title">Connexion rosbridge (lecture seule)</h2>
-          <span className={`state-badge ${snapshot.gzSimFlag ? 'active' : 'ready'} mono`}>
-            gz_sim:={snapshot.gzSimFlag ? 'true' : 'false'}
-          </span>
-        </div>
+        <h2 ref={headingRef} tabIndex={-1} className="visually-hidden">
+          Connexion ROS 2
+        </h2>
         <div className="panel-body">
           <form className="config-form" onSubmit={handleSubmit}>
             <div className="field-group">
-              <label className="field-label" htmlFor="rosbridge-url">
-                WebSocket rosbridge_server
+              <label className="visually-hidden" htmlFor={urlInputId}>
+                Serveur WebSocket ROS 2
               </label>
               <input
-                id="rosbridge-url"
-                type="text"
+                id={urlInputId}
+                type="url"
+                required
                 className="text-input mono"
                 value={urlDraft}
                 onChange={(e) => setUrlDraft(e.target.value)}
-                placeholder="ws://192.168.x.x:9090"
+                placeholder="ws://localhost:9090"
               />
             </div>
             <button type="submit" className="action-btn primary">
@@ -70,36 +68,38 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({
               Mode démo
             </button>
           </form>
-          <p className="metric-label" style={{ margin: '8px 0 0 0' }}>
-            {sourceMode === 'demo' ? 'Relecture locale active.' : `${connectionDetail} (${connectionState}).`}
-          </p>
         </div>
       </section>
 
       <section className="panel-block">
-        <div className="panel-header">
-          <h2 className="section-title">Topics ROS 2 écoutés</h2>
-          <span className="step-meta">Abonnements passifs uniquement</span>
-        </div>
-        <div className="data-table-wrap">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-labelledby="ros-topics-caption"
+          className="data-table-wrap"
+        >
           <table className="data-table">
+            <caption id="ros-topics-caption" className="table-caption">
+              Topics ROS 2 Salle 315
+            </caption>
             <thead>
               <tr>
-                <th>Topic</th>
-                <th>Producteur</th>
-                <th>Hz</th>
-                <th>État</th>
+                <th scope="col">Topic</th>
+                <th scope="col">Hz</th>
+                <th scope="col">État</th>
               </tr>
             </thead>
             <tbody>
               {snapshot.rosTopics.map((item) => (
                 <tr key={item.topic}>
-                  <td className="mono">{item.topic}</td>
-                  <td>{item.nodeOwner}</td>
+                  <th scope="row" className="mono">
+                    {item.topic}
+                  </th>
                   <td className="mono">{(item.hz ?? 0).toFixed(1)}</td>
                   <td>
-                    <span className={`state-badge ${item.active ? 'ok' : 'standby'}`}>
-                      {item.active ? 'Actif' : 'Inactif'}
+                    <span className={`scada-tag ${item.active ? 'ok' : 'standby'}`}>
+                      <span className="scada-led" aria-hidden="true" />
+                      <span>{item.active ? 'Actif' : 'Veille'}</span>
                     </span>
                   </td>
                 </tr>

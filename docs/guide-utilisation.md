@@ -7,8 +7,8 @@
 | Mode | Prérequis | Ce qu’il permet de vérifier |
 | --- | --- | --- |
 | Démo locale | Node.js, npm et navigateur | Parcourir des traces intégrées à l’IHM, sélectionner les équipements et lire les états. |
-| Orchestrateur autonome | Les mêmes outils, Python 3 et PyYAML | Envoyer des commandes au superviseur et suivre son état synthétique via WebSocket. |
-| Orchestrateur avec ROS 2 | Les mêmes outils, environnement ROS 2 Jazzy chargé | Publier l’état synthétique sur ROS 2 et recevoir des commandes sur un topic ROS. |
+| Orchestrateur autonome | Les mêmes outils, Python 3 et PyYAML | Envoyer des commandes au superviseur et suivre son état synthétique via WebSocket (`ws://localhost:9090`). |
+| Simulation complète ROS 2 + Gazebo + IHM | ROS 2 Jazzy, Gazebo Harmonic, `colcon` (`./scripts/build_workspace.sh`) | Connecter bidirectionnellement en direct la simulation complète (`full_usine40_sim.launch.py`), le transfert exclusif Bloc A → Bloc B par TIAGo, les flux ZED 2 (`:8080`) et l’IHM React (`:5173` ou `:8080/ihm/` via `ws://localhost:9090`). |
 
 ### Démarrer l’IHM
 

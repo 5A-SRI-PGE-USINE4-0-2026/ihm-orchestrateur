@@ -1,45 +1,127 @@
 :root {
-  /* Mode sombre industriel (graphite-acier, sans noir pur ni néon criard) */
-  --bg-hall: #11171e;
-  --bg-panel: #171f29;
-  --bg-recessed: #0e141b;
-  --bg-subtle: #1e2835;
-  --bg-elevated: #232f3e;
+  color-scheme: dark;
+  accent-color: var(--accent-control);
 
-  --ink-primary: #e8eef5;
-  --ink-secondary: #99a9ba;
-  --ink-muted: #687a8c;
+  /* Palette industrielle achromatique Graphite / Acier (ISA-101 Sombre par défaut) */
+  --bg-hall: #141517;
+  --bg-panel: #1b1c1f;
+  --bg-recessed: #111214;
+  --bg-subtle: #222428;
+  --bg-elevated: #2a2d32;
+  --bg-cad: #121316;
+  --bg-cad-floor: #17191d;
+  --cad-grid-line: #22252b;
 
-  --border-structural: #273342;
-  --border-subtle: #1f2a37;
+  --ink-primary: #e4e6eb;
+  --ink-secondary: #b8bec8;
+  --ink-muted: #989fa9;
 
-  /* Signaux fonctionnels lisibles sur fond sombre */
-  --accent-yaskawa: #4e93e6;
-  --accent-yaskawa-soft: rgba(78, 147, 230, 0.14);
+  --border-structural: #2e3136;
+  --border-subtle: #25282d;
+  --border-interactive: #6d737e;
 
-  --signal-ok: #38b87c;
-  --signal-ok-soft: rgba(56, 184, 124, 0.14);
+  --scrollbar-thumb: #6f7682;
+  --scrollbar-track: #16171a;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: auto;
 
-  --signal-shuttle: #ebb52a;
-  --signal-shuttle-fill: #e3aa16;
-  --signal-shuttle-soft: rgba(235, 181, 42, 0.14);
+  /* Signaux fonctionnels ISA-101 (contrastes WCAG AA >= 4.5:1, toujours couplés à un code/forme) */
+  --accent-control: #5294e2;
+  --accent-yaskawa: #5294e2;
+  --accent-yaskawa-soft: rgba(82, 148, 226, 0.14);
+  --ink-on-accent: #0d1014;
 
-  --signal-fault: #e55353;
-  --signal-fault-soft: rgba(229, 83, 83, 0.16);
+  --signal-ok: #2fb36d;
+  --signal-ok-soft: rgba(47, 179, 109, 0.14);
 
-  --signal-standby: #8192a4;
-  --signal-standby-soft: rgba(129, 146, 164, 0.12);
+  --signal-shuttle: #e0a82e;
+  --signal-shuttle-fill: #d49b1f;
+  --signal-shuttle-soft: rgba(224, 168, 46, 0.14);
 
-  /* Typographie */
+  --signal-fault: #e5534b;
+  --signal-fault-soft: rgba(229, 83, 75, 0.16);
+
+  --signal-standby: #949ba6;
+  --signal-standby-soft: rgba(148, 155, 166, 0.12);
+
+  /* Typographie technique : IBM Plex Sans + IBM Plex Mono tabular-nums */
   --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --radius-sm: 3px;
-  --radius-md: 5px;
+  /* Zéro badge pilule : angles vifs d'ingénierie (2px max) */
+  --radius-sm: 2px;
+  --radius-md: 2px;
 
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
+}
+
+/* Thème Clair Papier d'Ingénierie ISA-101 (activable via le commutateur d'en-tête) */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-hall: #eaecef;
+  --bg-panel: #f6f7f9;
+  --bg-recessed: #e2e5ea;
+  --bg-subtle: #ffffff;
+  --bg-elevated: #ebedf2;
+  --bg-cad: #eef0f4;
+  --bg-cad-floor: #f8f9fb;
+  --cad-grid-line: #dfe3ea;
+
+  --ink-primary: #16181d;
+  --ink-secondary: #343942;
+  --ink-muted: #525866;
+
+  --border-structural: #c8cdd6;
+  --border-subtle: #d6dbe3;
+  --border-interactive: #6c7380;
+
+  --scrollbar-thumb: #6c7380;
+  --scrollbar-track: #e1e4ea;
+
+  --accent-control: #0f5cc0;
+  --accent-yaskawa: #0f5cc0;
+  --accent-yaskawa-soft: rgba(15, 92, 192, 0.11);
+  --ink-on-accent: #ffffff;
+
+  --signal-ok: #137547;
+  --signal-ok-soft: rgba(19, 117, 71, 0.11);
+
+  --signal-shuttle: #945d00;
+  --signal-shuttle-fill: #c8840a;
+  --signal-shuttle-soft: rgba(148, 93, 0, 0.11);
+
+  --signal-fault: #be241e;
+  --signal-fault-soft: rgba(190, 36, 30, 0.11);
+
+  --signal-standby: #525866;
+  --signal-standby-soft: rgba(82, 88, 102, 0.1);
+}
+
+@supports (color: light-dark(#000, #fff)) {
+  :root {
+    --bg-hall: light-dark(#eaecef, #141517);
+    --bg-panel: light-dark(#f6f7f9, #1b1c1f);
+    --bg-recessed: light-dark(#e2e5ea, #111214);
+    --bg-subtle: light-dark(#ffffff, #222428);
+    --bg-elevated: light-dark(#ebedf2, #2a2d32);
+    --bg-cad: light-dark(#eef0f4, #121316);
+    --bg-cad-floor: light-dark(#f8f9fb, #17191d);
+    --cad-grid-line: light-dark(#dfe3ea, #22252b);
+
+    --ink-primary: light-dark(#16181d, #e4e6eb);
+    --ink-secondary: light-dark(#343942, #b8bec8);
+    --ink-muted: light-dark(#525866, #989fa9);
+
+    --border-structural: light-dark(#c8cdd6, #2e3136);
+    --border-subtle: light-dark(#d6dbe3, #25282d);
+    --border-interactive: light-dark(#6c7380, #6d737e);
+
+    --scrollbar-thumb: light-dark(#6c7380, #6f7682);
+    --scrollbar-track: light-dark(#e1e4ea, #16171a);
+  }
 }

@@ -1,8 +1,10 @@
-"""Serveur WebSocket rosbridge v2 strictement en LECTURE SEULE (stdlib Python uniquement).
+"""Serveur WebSocket rosbridge v2 bidirectionnel (stdlib Python uniquement).
 
-Implémente RFC 6455 + protocole JSON rosbridge v2 (`subscribe` / `unsubscribe` / `publish` sortant).
-Toute tentative d'un client WebSocket d'émettre `publish`, `call_service` ou `send_action_goal`
-est explicitement refusée afin de garantir l'exclusivité de commande de l'orchestrateur L1.
+Implémente RFC 6455 + protocole JSON rosbridge v2 :
+- `subscribe` / `unsubscribe` + diffusion sortante `publish` avec cache du dernier état
+- `call_service` -> `service_response` (ordres de production, E-Stop, pause, reset, NL/PDDL, QC)
+- `publish` entrant vers les topics de commande autorisés (`/mfja/orchestrator/*`)
+Peut également fonctionner en mode strictement lecture seule si `allow_commands=False`.
 """
 
 from __future__ import annotations
@@ -14,10 +16,13 @@ import hashlib
 import json
 import struct
 import threading
-from typing import Any
+from typing import Any, Callable
 
 
 _WS_MAGIC_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+ServiceHandler = Callable[[str, dict[str, Any]], dict[str, Any]]
+PublishHandler = Callable[[str, dict[str, Any]], dict[str, Any] | None]
 
 
 @dataclass(eq=False)
@@ -70,12 +75,23 @@ async def _read_ws_frame(reader: asyncio.StreamReader) -> tuple[int, bytes] | No
     return opcode, bytes(payload)
 
 
-class ReadOnlyRosbridgeServer:
-    """Pont WebSocket rosbridge v2 en lecture seule exécuté sur un thread asyncio dédié."""
+class RosbridgeServer:
+    """Pont WebSocket rosbridge v2 exécuté sur un thread asyncio dédié."""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 9090) -> None:
+    def __init__(
+        self,
+        host: str = "0.0.0.0",
+        port: int = 9090,
+        allow_commands: bool = True,
+        service_handler: ServiceHandler | None = None,
+        publish_handler: PublishHandler | None = None,
+    ) -> None:
         self.host = host
-        self.port = port
+        self._requested_port = int(port)
+        self.port = int(port)
+        self.allow_commands = bool(allow_commands)
+        self.service_handler: ServiceHandler | None = service_handler
+        self.publish_handler: PublishHandler | None = publish_handler
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._clients: set[_WsClient] = set()
@@ -92,6 +108,8 @@ class ReadOnlyRosbridgeServer:
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._shutdown(), self._loop).result(timeout=2.0)
             self._loop.call_soon_threadsafe(self._loop.stop)
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=1.5)
 
     def client_count(self) -> int:
         return len(self._clients)
@@ -114,7 +132,13 @@ class ReadOnlyRosbridgeServer:
             self._loop.close()
 
     async def _start_server(self) -> None:
-        self._server = await asyncio.start_server(self._handle_connection, self.host, self.port)
+        self._server = await asyncio.start_server(
+            self._handle_connection, self.host, self._requested_port
+        )
+        if self._server.sockets:
+            sockname = self._server.sockets[0].getsockname()
+            if sockname and len(sockname) >= 2:
+                self.port = int(sockname[1])
 
     async def _shutdown(self) -> None:
         for client in list(self._clients):
@@ -177,11 +201,15 @@ class ReadOnlyRosbridgeServer:
                 if opcode == 0x8:  # Close
                     break
                 if opcode == 0x9:  # Ping -> Pong
-                    writer.write(_encode_ws_frame(payload.decode("utf-8", errors="ignore"), opcode=0xA))
+                    writer.write(
+                        _encode_ws_frame(payload.decode("utf-8", errors="ignore"), opcode=0xA)
+                    )
                     await writer.drain()
                     continue
                 if opcode == 0x1:  # Text JSON rosbridge frame
-                    await self._handle_rosbridge_message(client, payload.decode("utf-8", errors="ignore"))
+                    await self._handle_rosbridge_message(
+                        client, payload.decode("utf-8", errors="ignore")
+                    )
         finally:
             self._clients.discard(client)
             try:
@@ -189,6 +217,13 @@ class ReadOnlyRosbridgeServer:
                 await writer.wait_closed()
             except OSError:
                 pass
+
+    async def _send_frame_safe(self, client: _WsClient, payload_obj: dict[str, Any]) -> None:
+        try:
+            client.writer.write(_encode_ws_frame(json.dumps(payload_obj, ensure_ascii=False)))
+            await client.writer.drain()
+        except OSError:
+            self._clients.discard(client)
 
     async def _handle_rosbridge_message(self, client: _WsClient, text: str) -> None:
         try:
@@ -201,31 +236,98 @@ class ReadOnlyRosbridgeServer:
 
         if op == "subscribe" and isinstance(topic, str):
             client.subscriptions.add(topic)
-            # Pousse immédiatement le dernier état connu au nouvel abonné
             if topic in self._latest_by_topic:
-                frame = _encode_ws_frame(
-                    json.dumps({"op": "publish", "topic": topic, "msg": self._latest_by_topic[topic]})
+                await self._send_frame_safe(
+                    client,
+                    {"op": "publish", "topic": topic, "msg": self._latest_by_topic[topic]},
                 )
-                client.writer.write(frame)
-                await client.writer.drain()
-        elif op == "unsubscribe" and isinstance(topic, str):
+            return
+
+        if op == "unsubscribe" and isinstance(topic, str):
             client.subscriptions.discard(topic)
-        elif op in ("publish", "call_service", "send_action_goal"):
-            # Refus strict côté serveur : l'IHM ne peut jamais commander l'orchestrateur
-            notice = json.dumps(
-                {
-                    "op": "status",
-                    "level": "error",
-                    "msg": f"Opération '{op}' refusée : le pont IHM est strictement en lecture seule.",
-                }
-            )
-            client.writer.write(_encode_ws_frame(notice))
-            await client.writer.drain()
+            return
+
+        if not self.allow_commands:
+            if op in ("publish", "call_service", "send_action_goal"):
+                await self._send_frame_safe(
+                    client,
+                    {
+                        "op": "status",
+                        "level": "error",
+                        "msg": f"Opération '{op}' refusée : le pont IHM est en mode lecture seule.",
+                    },
+                )
+            return
+
+        if op == "call_service":
+            service = str(data.get("service", "")).strip()
+            req_id = str(data.get("id", ""))
+            raw_args = data.get("args")
+            args = raw_args if isinstance(raw_args, dict) else {}
+            if not service or self.service_handler is None:
+                await self._send_frame_safe(
+                    client,
+                    {
+                        "op": "service_response",
+                        "id": req_id,
+                        "service": service,
+                        "values": {"ok": False, "message": "Gestionnaire de service indisponible."},
+                        "result": False,
+                    },
+                )
+                return
+
+            try:
+                values = await asyncio.to_thread(self.service_handler, service, args)
+                ok = bool(values.get("ok", True))
+            except Exception as exc:
+                values = {"ok": False, "message": f"Erreur service '{service}': {exc}"}
+                ok = False
+
+            resp_payload: dict[str, Any] = {
+                "op": "service_response",
+                "service": service,
+                "values": values,
+                "result": ok,
+            }
+            if req_id:
+                resp_payload["id"] = req_id
+            await self._send_frame_safe(client, resp_payload)
+            return
+
+        if op == "publish" and isinstance(topic, str):
+            raw_msg = data.get("msg")
+            msg_dict = raw_msg if isinstance(raw_msg, dict) else {}
+            if self.publish_handler is None:
+                await self._send_frame_safe(
+                    client,
+                    {"op": "status", "level": "error", "msg": "Publication entrante non configurée."},
+                )
+                return
+            try:
+                ack = await asyncio.to_thread(self.publish_handler, topic, msg_dict)
+                if isinstance(ack, dict):
+                    await self._send_frame_safe(
+                        client,
+                        {
+                            "op": "status",
+                            "level": "info" if ack.get("ok", True) else "error",
+                            "msg": str(ack.get("message", "")),
+                        },
+                    )
+            except Exception as exc:
+                await self._send_frame_safe(
+                    client,
+                    {"op": "status", "level": "error", "msg": f"Erreur commande WS: {exc}"},
+                )
+            return
 
     async def _send_to_subscribers(self, topic: str, msg: dict[str, Any]) -> None:
         if not self._clients:
             return
-        frame = _encode_ws_frame(json.dumps({"op": "publish", "topic": topic, "msg": msg}))
+        frame = _encode_ws_frame(
+            json.dumps({"op": "publish", "topic": topic, "msg": msg}, ensure_ascii=False)
+        )
         dead: list[_WsClient] = []
         for client in list(self._clients):
             if topic not in client.subscriptions:
@@ -237,3 +339,7 @@ class ReadOnlyRosbridgeServer:
                 dead.append(client)
         for d in dead:
             self._clients.discard(d)
+
+
+# Alias de compatibilité ascendante
+ReadOnlyRosbridgeServer = RosbridgeServer

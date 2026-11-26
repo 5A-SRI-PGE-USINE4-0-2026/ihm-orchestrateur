@@ -1,5 +1,4 @@
 import React from 'react';
-import { Pause, Play } from 'lucide-react';
 import type { DemoScenarioId } from '../types/cell';
 
 interface OfflinePreviewBarProps {
@@ -10,11 +9,11 @@ interface OfflinePreviewBarProps {
 }
 
 const DEMO_SCENARIOS: Array<{ id: DemoScenarioId; label: string }> = [
-  { id: 'j1-nominal', label: 'J1' },
-  { id: 'j1-reconfig', label: 'J1 alt' },
-  { id: 'j2-interzones', label: 'J2 TIAGo' },
-  { id: 'j3-vla', label: 'J3 VLA' },
-  { id: 'fault-safety', label: 'Défaut' },
+  { id: 'j1-nominal', label: 'J1 NOMINAL' },
+  { id: 'j1-reconfig', label: 'J1 RECONFIG' },
+  { id: 'j2-interzones', label: 'J2 TIAGO A→B' },
+  { id: 'j3-vla', label: 'J3 PDDL/L8' },
+  { id: 'fault-safety', label: 'ALM SÉCURITÉ' },
 ];
 
 export const OfflinePreviewBar: React.FC<OfflinePreviewBarProps> = ({
@@ -25,7 +24,7 @@ export const OfflinePreviewBar: React.FC<OfflinePreviewBarProps> = ({
 }) => {
   return (
     <footer className="offline-bar" aria-label="Traces de démonstration hors-ligne">
-      <span>Démo hors-ligne (aucune commande envoyée)</span>
+      <span>MODE RELECTURE LOCALE — AUCUNE COMMANDE MATÉRIELLE ÉMISE</span>
 
       <div className="offline-controls">
         {DEMO_SCENARIOS.map((item) => (
@@ -44,10 +43,9 @@ export const OfflinePreviewBar: React.FC<OfflinePreviewBarProps> = ({
           type="button"
           className="pause-chip"
           onClick={onTogglePause}
-          aria-label={paused ? 'Reprendre' : 'Pause'}
+          aria-label={paused ? 'Reprendre la trace' : 'Mettre en pause la trace'}
         >
-          {paused ? <Play size={12} aria-hidden="true" /> : <Pause size={12} aria-hidden="true" />}
-          {paused ? 'Reprendre' : 'Pause'}
+          {paused ? '▶ REPRENDRE' : '❚❚ PAUSE'}
         </button>
       </div>
     </footer>

@@ -2,8 +2,8 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>mfja_orchestrator</name>
-  <version>1.0.0</version>
-  <description>Orchestrateur / Superviseur déterministe L1 pour la cellule Usine 4.0 Salle 315 MFJA (UPSSITECH SRI)</description>
+  <version>1.1.0</version>
+  <description>Orchestrateur / Superviseur déterministe L1 bidirectionnel pour la cellule Usine 4.0 Salle 315 MFJA (UPSSITECH SRI)</description>
   <maintainer email="sri@upssitech.eu">Équipe PGE 5A SRI</maintainer>
   <license>MIT</license>
 
@@ -11,9 +11,13 @@
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>usine40_interfaces</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

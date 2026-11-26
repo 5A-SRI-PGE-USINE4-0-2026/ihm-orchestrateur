@@ -1,6 +1,6 @@
 # IHM de supervision et orchestrateur L1 de la salle 315
 
-L’IHM web du projet Usine 4.0 de la MFJA affiche l’état de la cellule, la progression du cycle et les anomalies. Le superviseur L1 exécute des scénarios de démonstration commandés depuis le terminal ou, avec ROS 2 Jazzy, depuis un topic dédié. L’IHM est en lecture seule dans les deux cas.
+L’IHM web du projet Usine 4.0 de la MFJA affiche l’état de la cellule, le synoptique CAO des navettes Montrac et postes robotisés, la progression du cycle, la télémétrie ROS 2 (y compris le backend `ros2_control` Yaskawa `/yaskawa_LEFT` et `/yaskawa_RIGHT`) et les anomalies. Le superviseur L1 exécute des scénarios de démonstration en mode autonome ou connecté à la simulation complète ROS 2 Jazzy / Gazebo via l’IHM web bidirectionnelle (`ws://localhost:9090`).
 
 ![Vue Cellule pendant le convoyage J1. La navette Montrac A est sélectionnée et l’étape active apparaît dans le panneau de droite.](docs/images/cellule-j1.png)
 

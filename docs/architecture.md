@@ -2,26 +2,25 @@
 
 [Retour au README](../README.md) · [Guide d’utilisation et d’essai](guide-utilisation.md)
 
-## Flux de la branche IHM et orchestrateur
+## Flux unifié IHM, Orchestrateur L1 et Simulation ROS 2 + Gazebo
 
 ```mermaid
 flowchart LR
-    T["Terminal interactif"] --> S["Superviseur Python L1"]
-    R["Topic de commande ROS 2"] -->|"avec rclpy"| S
+    T["Terminal interactif / CLI"] <--> S["mfja_orchestrator (L1 + Pont WS :9090)"]
+    SIM["Simulation ROS 2 + Gazebo (/usine40/*)"] <-->|"télémétrie + services/actions"| S
     Y["Scénarios et paramètres YAML"] --> S
-    S --> N["Publications ROS 2 natives"]
-    S --> W["Pont WebSocket compatible rosbridge"]
-    W --> I["IHM React en lecture seule"]
+    S <-->|"WebSocket rosbridge v2 bidirectionnel"| I["IHM React (:5173 / :8080/ihm/)"]
+    SIM <-->|"MJPEG ZED 2 + REST :8080"| I
     D["Traces intégrées au navigateur"] -->|"démo locale"| I
 ```
 
-Le superviseur construit un instantané de cellule qui contient les états d’équipement, la séquence, la sécurité, les événements, le plan candidat et les KPI. Le lanceur transmet cet instantané au serveur WebSocket et, avec `rclpy`, le publie aussi sur ROS 2. Le front s’appuie sur cet instantané pour afficher une même étape et un même état de pièce dans le synoptique et les panneaux associés. En mode démo locale, le navigateur construit un instantané à partir de ses propres traces.
+Le superviseur `mfja_orchestrator` synchronise en temps réel le graphe ROS 2 de la simulation (`/usine40/kpi`, `/usine40/safety/status`, `/usine40/workpieces/active_state`, `/usine40/perception/poste_{a,b}/result`, `/yaskawa_hc10*/joint_states`, `/room_315/rails/*/shuttles/state`, `/usine40/tiago/world_pose`) avec l’IHM React via `ws://0.0.0.0:9090`, et relaie les commandes opérateur (ordres de production, pause, reset, E-Stop, présence opérateur, consignes langage naturel) vers les services `/usine40/*`. Conformément à la topologie physique de la Salle 315, **aucun convoyeur ne relie le Bloc A au Bloc B** : TIAGo assure seul le transfert inter-blocs (`PICK_POSTE_A_DELIVER_POSTE_B`). En mode autonome (`--standalone`), le superviseur fonctionne également hors ROS 2 pour les essais rapides.
 
 Les décisions ci-dessous décrivent le code de la branche et les effets de sa conception.
 
 | Choix observé | Intérêt pour ce lot | Limite actuelle |
 | --- | --- | --- |
-| **IHM passive et commande au terminal** | Sépare le suivi et le pilotage. Le navigateur envoie des abonnements WebSocket, tandis que le terminal et le topic ROS portent les ordres. | Le lancement et l’arrêt graphiques restent un arbitrage de périmètre dans la V4. Le contrôle d’accès au réseau ROS et au pont relève du déploiement. |
+| **IHM bidirectionnelle et validation L1 fail-closed** | Combine supervision temps réel et pilotage sécurisé : le navigateur s’abonne aux flux WebSocket et émet des requêtes `call_service` / `publish` (`allow_ws_commands: true`) systématiquement filtrées par le répartiteur L1 avant d’atteindre `/usine40/*`, tout en conservant le pilotage CLI et topic ROS. | Le contournement direct vers les actionneurs bas niveau (`send_action_goal`) reste volontairement bloqué côté pont. Le contrôle d’accès réseau relève du déploiement. |
 | **Machine à états Python et étapes temporisées** | Rend la séquence reproductible. L’ordre des étapes, le verrouillage et l’acquittement sont faciles à observer et à rejouer. | Les poses et l’avancement sont calculés dans le processus. Les transitions physiques devraient dépendre des retours des équipements. |
 | **Séquences et paramètres dans le YAML** | Donne un point d’entrée pour changer l’ordre, les durées, les noms de topics, les seuils et les valeurs de démonstration. J1 et J1 alternatif illustrent deux enchaînements. | Les identifiants d’action correspondent à des branches Python. Une primitive nouvelle demande une implémentation. Certaines poses de démonstration restent définies dans le code. |
 | **Instantané JSON partagé** | L’IHM obtient un état cohérent avec un seul message. Le pont renvoie aussi le dernier instantané connu lorsqu’un client s’abonne. | Le schéma dépend du contrat partagé entre Python et TypeScript. Le topic ROS utilise une chaîne JSON. |
@@ -62,7 +61,7 @@ Les noms ci-dessous sont les valeurs par défaut du YAML. **WS** indique une dif
 | `/tiago/amcl_pose` | `geometry_msgs/msg/PoseStamped` | Sortie ROS 2. Pose synthétique dans le repère `map`. |
 | `/mfja/vla/candidate_plan` | `std_msgs/msg/String` | Sortie ROS 2 et WS. Le plan figure aussi dans l’instantané. |
 
-Le pont reconnaît `subscribe` et `unsubscribe`. Il transmet la télémétrie dans des trames sortantes `op: publish` et répond par une erreur aux opérations entrantes `publish`, `call_service` et `send_action_goal`. Le pont et le nœud produisent leurs messages à partir du superviseur. Ce pont est un sous-ensemble du protocole rosbridge et n’exporte pas le graphe ROS entier. L’IHM interprète directement l’instantané et le flux de sécurité. Pour les autres topics, le client enregistre l’activité des trames qui lui parviennent.
+Le pont WebSocket (`allow_ws_commands: true` par défaut dans `cell_config.yaml`) reconnaît `subscribe`, `unsubscribe`, `publish` (commandes CLI sur `/mfja/orchestrator/cli_command`) et `call_service` (ordres de production `/usine40/supervision/{start_order,pause,reset}`, sécurité `/usine40/safety/{estop,set_human_presence}`, inspection `/usine40/perception/inspect` et consignes langage naturel `/usine40/nl/{parse,approve}`). Toute commande reçue est validée de manière déterministe et fail-closed par `mfja_orchestrator` (rejetant notamment toute requête de convoyeur A↔B) avant d’être relayée au graphe ROS 2 ; les appels bas niveau non autorisés (`send_action_goal`) restent refusés. L’IHM interprète directement l’instantané principal, l’état de sécurité et les réponses `service_response`. Pour les autres topics, le client enregistre l’activité des trames qui lui parviennent.
 
 Voici un exemple d’abonnement émis par le navigateur, suivi d’une trame reçue dont le champ `data` est abrégé :
 
@@ -84,7 +83,7 @@ Voici un exemple d’abonnement émis par le navigateur, suivi d’une trame re�
 | [public/config.json](../public/config.json) | URL WebSocket, source initiale, délai de reconnexion et noms de topics attendus par l’IHM. L’URL enregistrée par le navigateur prend priorité. |
 | [supervisor.py](../ros2_ws/src/mfja_orchestrator/mfja_orchestrator/supervisor.py) | États, actions synthétiques, règles `propose` et génération de l’instantané. |
 | [orchestrator_node.py](../ros2_ws/src/mfja_orchestrator/mfja_orchestrator/orchestrator_node.py) | Lanceur, CLI, boucle autonome et interfaces ROS 2. `--gz-sim` et `env` changent les libellés associés à l’environnement. |
-| [ws_bridge.py](../ros2_ws/src/mfja_orchestrator/mfja_orchestrator/ws_bridge.py) et [rosbridgeClient.ts](../src/services/rosbridgeClient.ts) | Pont WebSocket et client passif. |
+| [ws_bridge.py](../ros2_ws/src/mfja_orchestrator/mfja_orchestrator/ws_bridge.py) et [rosbridgeClient.ts](../src/services/rosbridgeClient.ts) | Pont WebSocket rosbridge v2 bidirectionnel (`allow_ws_commands`) et client TypeScript (abonnements + appels de services `/usine40/*`). |
 | [cell.ts](../src/types/cell.ts) et [demoTelemetry.ts](../src/services/demoTelemetry.ts) | Types d’instantanés côté IHM et traces du mode démo. |
 | [salle315_domain.pddl](../ros2_ws/src/mfja_orchestrator/pddl/salle315_domain.pddl) | Domaine de planification fourni pour la suite de J3. |
 

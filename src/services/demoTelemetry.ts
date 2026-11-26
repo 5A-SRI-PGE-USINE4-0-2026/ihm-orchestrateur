@@ -3,11 +3,14 @@ import type {
   CycleRecord,
   CycleStep,
   DemoScenarioId,
+  LiveSimTelemetry,
   PreconditionCheck,
   RosTopicMetric,
+  ShuttleWorldPose,
   SupervisorEvent,
   VlaPlanCandidate,
 } from '../types/cell';
+import { sampleMontracShuttlePose } from '../data/room315CadGeometry';
 
 function formatClock(offsetSeconds = 0): string {
   const d = new Date(Date.now() + offsetSeconds * 1000);
@@ -115,11 +118,25 @@ function buildRosTopics(
       active: true,
     },
     {
-      topic: '/tiago/amcl_pose',
-      messageType: 'geometry_msgs/msg/PoseWithCovarianceStamped',
-      nodeOwner: 'tiago_nav2 (ros2_control)',
-      hz: isJ2 ? 20.0 : 0.0,
+      topic: '/tiago1/cmd_vel',
+      messageType: 'geometry_msgs/msg/Twist',
+      nodeOwner: 'tiago_logistics_node -> DiffDrive PAL TIAGo',
+      hz: isJ2 ? 25.0 : 0.0,
       active: isJ2,
+    },
+    {
+      topic: '/tiago1/joint_trajectory',
+      messageType: 'trajectory_msgs/msg/JointTrajectory',
+      nodeOwner: 'tiago_logistics_node (Torso + 7-DOF Arm)',
+      hz: isJ2 ? 10.0 : 0.0,
+      active: isJ2,
+    },
+    {
+      topic: '/tiago1/joint_states',
+      messageType: 'sensor_msgs/msg/JointState',
+      nodeOwner: 'gz_sim JointStatePublisher (PAL TIAGo)',
+      hz: isJ2 ? 20.0 : 5.0,
+      active: true,
     },
     {
       topic: '/mfja/vla/candidate_plan',
@@ -155,6 +172,154 @@ const JOINTS_TABLE: [number, number, number, number, number, number] = [-18, 16,
 const JOINTS_BLUE: [number, number, number, number, number, number] = [24, 28, 34, -8, -62, 18];
 const JOINTS_GREEN: [number, number, number, number, number, number] = [44, 25, 38, -6, -63, 32];
 const JOINTS_HANDOVER: [number, number, number, number, number, number] = [62, 18, 40, 12, -52, 48];
+
+function demoShuttleWorldPose(
+  side: 'left' | 'right',
+  progress: number,
+  speedMmS: number,
+  name: string
+): ShuttleWorldPose {
+  return sampleMontracShuttlePose(side, progress, name, Math.round(speedMmS) / 1000);
+}
+
+function demoTiagoWorldPoseFromProgress(progress: number): {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+} {
+  if (progress <= 0.08) {
+    return { x: -9.0, y: -1.6, z: 0, yaw: 1.5708 };
+  }
+  if (progress <= 0.25) {
+    const t = (progress - 0.08) / 0.17;
+    return {
+      x: Math.round(lerp(-12.8, -11.66, t) * 1000) / 1000,
+      y: Math.round(lerp(-1.55, -2.98, t) * 1000) / 1000,
+      z: 0,
+      yaw: 0,
+    };
+  }
+  if (progress <= 0.5) {
+    const t = (progress - 0.25) / 0.25;
+    return {
+      x: Math.round(lerp(-11.66, -12.8, t) * 1000) / 1000,
+      y: Math.round(lerp(-2.98, -3.05, t) * 1000) / 1000,
+      z: 0,
+      yaw: t < 0.15 ? 0 : Math.PI,
+    };
+  }
+  if (progress <= 0.75) {
+    const t = (progress - 0.5) / 0.25;
+    return {
+      x: Math.round(lerp(-12.8, -13.96, t) * 1000) / 1000,
+      y: Math.round(lerp(-3.05, -3.18, t) * 1000) / 1000,
+      z: 0,
+      yaw: Math.PI,
+    };
+  }
+  return { x: -16.48, y: -1.6, z: 0, yaw: 1.5708 };
+}
+
+function buildDemoLiveSim(opts: {
+  lineState: string;
+  partLocation: CellSnapshot['partLocation'];
+  montracAProgress: number;
+  montracASpeed: number;
+  montracBProgress: number;
+  montracBSpeed: number;
+  tiagoProgress: number;
+  shuttleAName: string;
+  shuttleBName: string;
+}): LiveSimTelemetry {
+  const shLeft = demoShuttleWorldPose('left', opts.montracAProgress, opts.montracASpeed, opts.shuttleAName);
+  const shRight = demoShuttleWorldPose('right', opts.montracBProgress, opts.montracBSpeed, opts.shuttleBName);
+  const tp = demoTiagoWorldPoseFromProgress(opts.tiagoProgress);
+
+  let activePose = { x: -10.14, y: -3.0, z: 0.6324, yaw: 0 };
+  let holder = 'poste_a';
+  let stage = 'OP1_POSTE_A';
+  let qualityStatus = 'OP1_OK';
+
+  if (opts.partLocation === 'yaskawa_a') {
+    activePose = { x: -10.76, y: -2.99, z: 0.76, yaw: 0 };
+    holder = 'yaskawa_hc10dt_1';
+  } else if (opts.partLocation === 'montrac_a') {
+    activePose = { x: shLeft.x, y: shLeft.y, z: 0.91, yaw: shLeft.yaw };
+    holder = 'left_shuttle_1';
+    stage = 'MONTRAC_LEFT';
+  } else if (opts.partLocation === 'tiago') {
+    activePose = {
+      x: Math.round((tp.x + 0.58 * Math.cos(tp.yaw)) * 1000) / 1000,
+      y: Math.round((tp.y + 0.58 * Math.sin(tp.yaw)) * 1000) / 1000,
+      z: 0.92,
+      yaw: tp.yaw,
+    };
+    holder = 'tiago1';
+    stage = 'IN_TRANSIT_A_TO_B';
+  } else if (opts.partLocation === 'montrac_b') {
+    activePose = { x: shRight.x, y: shRight.y, z: 0.91, yaw: shRight.yaw };
+    holder = 'right_shuttle_1';
+    stage = 'MONTRAC_RIGHT';
+  } else if (opts.partLocation === 'yaskawa_b') {
+    activePose = { x: -14.84, y: -3.09, z: 0.76, yaw: 0 };
+    holder = 'yaskawa_hc10_1';
+    stage = 'OP2_POSTE_B';
+  } else if (opts.partLocation === 'table_b') {
+    activePose = { x: -15.32, y: -3.0, z: 0.6324, yaw: 0 };
+    holder = 'poste_b_fixture';
+    stage = 'POSTE_B_QC';
+    qualityStatus = 'CONFORMING';
+  }
+
+  const activeWp = {
+    part_id: 'P02',
+    batch_id: 'DEMO-B1',
+    stage,
+    holder,
+    quality_status: qualityStatus,
+    simulated_defect: false,
+    pose: activePose,
+  };
+
+  return {
+    simConnected: false,
+    lineState: opts.lineState,
+    paused: false,
+    activeBatchId: 'DEMO-B1',
+    humanInCollabZone: false,
+    humanDistanceM: 4.2,
+    tiagoSpeedScale: 1.0,
+    tiagoWorldPose: tp,
+    tiagoCmdVel: { linearX: opts.partLocation === 'tiago' ? 0.45 : 0.0, angularZ: 0.0 },
+    tiagoTorsoLiftM: opts.partLocation === 'tiago' ? 0.3 : 0.07,
+    tiagoGripperM: opts.partLocation === 'tiago' ? 0.0 : 0.064,
+    humanWorldPose: { x: -12.8, y: 0.22, z: 0, yaw: -1.5708 },
+    shuttles: {
+      left: shLeft,
+      right: shRight,
+    },
+    staubliJointsDeg: [0, -18, 54, 0, -36, 0],
+    activeWorkpiece: activeWp,
+    workpieces: [
+      {
+        part_id: 'P01',
+        stage: 'EXPEDITION',
+        holder: 'expedition',
+        quality_status: 'CONFORMING',
+        pose: { x: -16.48, y: -1.02, z: 0.72, yaw: 0 },
+      },
+      activeWp,
+      {
+        part_id: 'P03',
+        stage: 'RAW_STOCK',
+        holder: 'stock',
+        quality_status: 'RAW',
+        pose: { x: -9.0, y: -0.96, z: 0.72, yaw: 0 },
+      },
+    ],
+  };
+}
 
 /**
  * Génère un instantané de télémétrie réaliste pour le mode de prévisualisation hors-ligne.
@@ -448,6 +613,17 @@ export function buildDemoSnapshot(
         ],
         cycleTimeSeriesS: [28.6, 27.9, 28.4, 25.9, 28.1, 27.4, 13.0],
       },
+      liveSim: buildDemoLiveSim({
+        lineState: 'ESTOP',
+        partLocation: 'montrac_a',
+        montracAProgress: 0.14,
+        montracASpeed: 0,
+        montracBProgress: 0.06,
+        montracBSpeed: 0,
+        tiagoProgress: 0.05,
+        shuttleAName: 'N1',
+        shuttleBName: 'N2',
+      }),
       rosTopics: buildRosTopics(true, false, false),
     };
   }
@@ -759,88 +935,73 @@ export function buildDemoSnapshot(
         recentCycles: BASE_HISTORY,
         cycleTimeSeriesS: [28.6, 27.9, 28.4, 25.9, 28.1, 27.4],
       },
+      liveSim: buildDemoLiveSim({
+        lineState: showingRejected ? 'VALIDATING' : 'RUNNING',
+        partLocation: showingRejected ? 'table_a' : subPhase < 0.35 ? 'yaskawa_a' : 'montrac_a',
+        montracAProgress: shuttleLoop,
+        montracASpeed: showingRejected ? 0 : shuttleLoop < 0.23 ? 185 : 0,
+        montracBProgress: 0.06,
+        montracBSpeed: 0,
+        tiagoProgress: 0.08,
+        shuttleAName: 'N1',
+        shuttleBName: 'N2',
+      }),
       rosTopics: buildRosTopics(false, false, true),
     };
   }
 
   if (scenario === 'j2-interzones') {
-    // 6-stage J2 flow: Yaskawa A -> Montrac A -> TIAGo Zone A->B -> Montrac B -> Yaskawa B
+    // 3-stage J2 flow: Yaskawa A (poste_a_out) -> TIAGo exclusive transfer A->B -> Yaskawa B (poste_b_in + ZED 2 QC)
     let activeStepIdx = 1;
     let partLocation: CellSnapshot['partLocation'] = 'table_a';
     let yaskawaAPose: CellSnapshot['yaskawaA']['poseTarget'] = 'home';
     let yaskawaBPose: CellSnapshot['yaskawaB']['poseTarget'] = 'home';
     let yaskawaAJoints = JOINTS_HOME;
     let yaskawaBJoints = JOINTS_HOME;
-    let montracAProgress = 0.06;
-    let montracBProgress = 0.06;
-    let tiagoProgress = 0.18;
+    const montracAProgress = 0.06;
+    const montracBProgress = 0.06;
+    let tiagoProgress = 0.25;
 
-    if (phase < 0.18) {
+    if (phase < 0.30) {
       activeStepIdx = 1;
-      const t = phase / 0.18;
+      const t = phase / 0.30;
       partLocation = t < 0.45 ? 'table_a' : 'yaskawa_a';
-      yaskawaAPose = t < 0.45 ? 'table' : 'station_blue';
-      yaskawaAJoints = interpolateJoints(JOINTS_TABLE, JOINTS_BLUE, t);
-    } else if (phase < 0.36) {
+      yaskawaAPose = t < 0.45 ? 'table' : 'tiago_handover';
+      yaskawaAJoints = interpolateJoints(JOINTS_TABLE, JOINTS_HANDOVER, t);
+      tiagoProgress = 0.25;
+    } else if (phase < 0.72) {
       activeStepIdx = 2;
-      const t = (phase - 0.18) / 0.18;
-      partLocation = 'montrac_a';
-      montracAProgress = lerp(0.06, 0.24, t);
-    } else if (phase < 0.62) {
-      activeStepIdx = 3;
-      const t = (phase - 0.36) / 0.26;
+      const t = (phase - 0.30) / 0.42;
       partLocation = 'tiago';
-      montracAProgress = 0.24;
-      tiagoProgress = lerp(0.22, 0.78, t);
+      tiagoProgress = lerp(0.25, 0.75, t);
       yaskawaAPose = t < 0.2 ? 'tiago_handover' : 'home';
       yaskawaAJoints = t < 0.2 ? JOINTS_HANDOVER : JOINTS_HOME;
-    } else if (phase < 0.80) {
-      activeStepIdx = 4;
-      const t = (phase - 0.62) / 0.18;
-      partLocation = 'montrac_b';
-      montracAProgress = 0.24;
-      tiagoProgress = 0.78;
-      montracBProgress = lerp(0.06, 0.24, t);
     } else {
-      activeStepIdx = 5;
-      const t = (phase - 0.80) / 0.20;
+      activeStepIdx = 3;
+      const t = (phase - 0.72) / 0.28;
       partLocation = t < 0.65 ? 'yaskawa_b' : 'table_b';
-      montracAProgress = 0.24;
-      tiagoProgress = lerp(0.78, 0.18, t);
-      montracBProgress = 0.24;
-      yaskawaBPose = t < 0.55 ? 'station_green' : 'table';
-      yaskawaBJoints = interpolateJoints(JOINTS_GREEN, JOINTS_TABLE, t);
+      tiagoProgress = 0.75;
+      yaskawaBPose = t < 0.5 ? 'tiago_handover' : 'table';
+      yaskawaBJoints = interpolateJoints(JOINTS_HANDOVER, JOINTS_TABLE, t);
     }
 
     const stepDefs: Array<{ label: string; owner: string; detail: string; dur: number }> = [
       {
-        label: 'Prise et dépose initiale en Zone A',
+        label: 'Op1 HC10DT & mise à disposition point TIAGo (poste_a_out)',
         owner: 'Yaskawa HC10DT',
-        detail: 'Chargement du cube sur la navette N1 (station Bleue)',
+        detail: 'Assemblage Bloc A puis dépose en poste_a_out pour prise TIAGo',
         dur: 6.2,
       },
       {
-        label: 'Convoyage local Zone A vers point de transfert',
-        owner: 'Montrac Zone A',
-        detail: 'Acheminement vers la station Verte côté couloir',
-        dur: 5.4,
-      },
-      {
-        label: 'Transit inter-zones par le robot mobile TIAGo',
-        owner: 'TIAGo (Nav2)',
-        detail: 'Navigation autonome dans le couloir central Zone A vers Zone B',
+        label: 'Transport exclusif Bloc A → Bloc B par TIAGo (PICK_POSTE_A_DELIVER_POSTE_B)',
+        owner: 'TIAGo',
+        detail: 'Navigation autonome couloir nord (aucun convoyeur entre Bloc A et Bloc B)',
         dur: 11.8,
       },
       {
-        label: 'Convoyage local Zone B vers poste de reprise',
-        owner: 'Montrac Zone B',
-        detail: 'Navette N2 achemine la pièce vers la station Verte',
-        dur: 5.1,
-      },
-      {
-        label: 'Reprise finale et dépose en Zone B',
-        owner: 'Yaskawa HC10',
-        detail: 'Déchargement du produit fini sur la table du poste B',
+        label: 'Prise poste_b_in, conditionnement Op2 HC10 & contrôle qualité ZED 2',
+        owner: 'Yaskawa HC10 + ZED 2',
+        detail: 'Réception en Bloc B, conditionnement et inspection vision OpenCV',
         dur: 6.0,
       },
     ];
@@ -889,7 +1050,7 @@ export function buildDemoSnapshot(
         status: activeStepIdx === 1 ? 'active' : 'ready',
         actionLabel:
           activeStepIdx === 1
-            ? 'Prise du cube et dépose sur la navette N1'
+            ? 'Assemblage Op1 et dépose en poste_a_out pour TIAGo'
             : 'En attente du cycle suivant',
         gripperState: partLocation === 'yaskawa_a' ? 'holding' : 'open',
         carryingPart: partLocation === 'yaskawa_a',
@@ -904,11 +1065,11 @@ export function buildDemoSnapshot(
         name: 'Yaskawa HC10',
         model: 'Motoman HC10 (Poste B)',
         zone: 'B',
-        status: activeStepIdx === 5 ? 'active' : 'ready',
+        status: activeStepIdx === 3 ? 'active' : 'ready',
         actionLabel:
-          activeStepIdx === 5
-            ? 'Reprise du cube depuis Montrac B et dépose table B'
-            : 'Prêt pour réception en zone B',
+          activeStepIdx === 3
+            ? 'Prise en poste_b_in, conditionnement Op2 & QC ZED 2'
+            : 'Prêt pour réception TIAGo en Bloc B',
         gripperState: partLocation === 'yaskawa_b' ? 'holding' : 'open',
         carryingPart: partLocation === 'yaskawa_b',
         poseTarget: yaskawaBPose,
@@ -919,14 +1080,14 @@ export function buildDemoSnapshot(
       },
       montracA: {
         id: 'montrac_a',
-        name: 'Montrac Zone A',
+        name: 'Montrac Bloc A (Local)',
         zone: 'A',
-        status: activeStepIdx === 2 ? 'active' : 'ready',
-        shuttleId: 'N1',
-        station: montracAProgress < 0.1 ? 'blue' : montracAProgress > 0.21 ? 'green' : 'transit',
+        status: 'ready',
+        shuttleId: 'L1',
+        station: 'blue',
         loopProgress: montracAProgress,
-        speedMmS: activeStepIdx === 2 ? 190 : 0,
-        partPresent: partLocation === 'montrac_a',
+        speedMmS: 0,
+        partPresent: false,
         watchdogOk: true,
         watchdogAgeMs: 22,
         hardwareInterface: 'gz_ros2_control (montrac_description)',
@@ -935,14 +1096,14 @@ export function buildDemoSnapshot(
       },
       montracB: {
         id: 'montrac_b',
-        name: 'Montrac Zone B',
+        name: 'Montrac Bloc B (Local)',
         zone: 'B',
-        status: activeStepIdx === 4 ? 'active' : 'ready',
-        shuttleId: 'N2',
-        station: montracBProgress < 0.1 ? 'blue' : montracBProgress > 0.21 ? 'green' : 'transit',
+        status: 'ready',
+        shuttleId: 'R1',
+        station: 'blue',
         loopProgress: montracBProgress,
-        speedMmS: activeStepIdx === 4 ? 190 : 0,
-        partPresent: partLocation === 'montrac_b',
+        speedMmS: 0,
+        partPresent: false,
         watchdogOk: true,
         watchdogAgeMs: 26,
         hardwareInterface: 'gz_ros2_control (montrac_description)',
@@ -951,20 +1112,23 @@ export function buildDemoSnapshot(
       },
       tiago: {
         id: 'tiago',
-        name: 'TIAGo',
-        status: activeStepIdx === 3 ? 'active' : 'ready',
+        name: 'PAL TIAGo (Lien A↔B)',
+        model: 'PAL Robotics TIAGo (7-DOF + Parallel Gripper)',
+        status: activeStepIdx === 2 ? 'active' : 'ready',
         actionLabel:
-          activeStepIdx === 3
-            ? 'Navigation autonome Zone A vers Zone B (Nav2)'
-            : activeStepIdx > 3
-              ? 'Transfert effectué — retour point d’attente'
-              : 'En attente de chargement côté Zone A',
+          activeStepIdx === 2
+            ? 'Transport exclusif Bloc A → Bloc B via baie centrale (PICK_POSTE_A_DELIVER_POSTE_B)'
+            : activeStepIdx > 2
+              ? 'Transfert A→B effectué — accosté en poste_b_in'
+              : 'Accosté en poste_a_out (baie centrale) pour prise TIAGo',
         corridorProgress: tiagoProgress,
         carryingPart: partLocation === 'tiago',
         batteryPct: 84,
-        navStack: 'Nav2 + AMCL (environnement partagé)',
-        hardwareInterface: 'gz_ros2_control (TIAGo officiel)',
-        rosTopic: '/tiago/amcl_pose',
+        cmdVel: { linearX: activeStepIdx === 2 ? 0.55 : 0.0, angularZ: 0.0 },
+        torsoLiftM: partLocation === 'tiago' ? 0.30 : 0.07,
+        navStack: 'DiffDrive /tiago1/cmd_vel + Baie Centrale ISO 15066',
+        hardwareInterface: 'gz_sim DiffDrive + JointTrajectoryController (PAL TIAGo)',
+        rosTopic: '/tiago1/cmd_vel · /tiago1/joint_trajectory · /tiago1/joint_states',
       },
       kukaA: {
         id: 'kuka_a',
@@ -1036,7 +1200,7 @@ export function buildDemoSnapshot(
           timestamp: formatClock(-1),
           level: 'info',
           source: 'Superviseur L1',
-          message: `Étape ${activeStepIdx}/5 en cours : ${stepDefs[activeStepIdx - 1].label}.`,
+          message: `Étape ${activeStepIdx}/${stepDefs.length} en cours : ${stepDefs[activeStepIdx - 1].label}.`,
         },
         {
           id: 'ev-j2-2',
@@ -1065,6 +1229,17 @@ export function buildDemoSnapshot(
         recentCycles: BASE_HISTORY,
         cycleTimeSeriesS: [35.2, 34.8, 33.9, 34.6, 34.1, 34.5],
       },
+      liveSim: buildDemoLiveSim({
+        lineState: 'RUNNING',
+        partLocation,
+        montracAProgress,
+        montracASpeed: 0,
+        montracBProgress,
+        montracBSpeed: 0,
+        tiagoProgress,
+        shuttleAName: 'L1',
+        shuttleBName: 'R1',
+      }),
       rosTopics: buildRosTopics(false, true, false),
     };
   }
@@ -1364,15 +1539,15 @@ export function buildDemoSnapshot(
     },
     tiago: {
       id: 'tiago',
-      name: 'TIAGo',
-      status: 'out_of_scope',
-      actionLabel: 'Hors chemin critique J1 (réservé au transfert J2)',
-      corridorProgress: 0.05,
+      name: 'TIAGo (Lien A↔B)',
+      status: 'ready',
+      actionLabel: 'Prêt — liaison exclusive Bloc A ↔ Bloc B',
+      corridorProgress: 0.5,
       carryingPart: false,
       batteryPct: 88,
-      navStack: 'Nav2 (inactif sur J1)',
+      navStack: 'TiagoTransport (liaison inter-blocs A↔B)',
       hardwareInterface: 'ros2_control (TIAGo)',
-      rosTopic: '/tiago/amcl_pose',
+      rosTopic: '/usine40/tiago/world_pose',
     },
     kukaA: {
       id: 'kuka_a',
@@ -1496,6 +1671,17 @@ export function buildDemoSnapshot(
       recentCycles: BASE_HISTORY,
       cycleTimeSeriesS: [28.6, 27.9, 28.4, 25.9, 28.1, 27.4],
     },
+    liveSim: buildDemoLiveSim({
+      lineState: 'RUNNING',
+      partLocation,
+      montracAProgress,
+      montracASpeed: montracSpeed,
+      montracBProgress: 0.06,
+      montracBSpeed: 0,
+      tiagoProgress: 0.5,
+      shuttleAName: 'N1',
+      shuttleBName: 'N2',
+    }),
     rosTopics: buildRosTopics(false, false, false),
   };
 }

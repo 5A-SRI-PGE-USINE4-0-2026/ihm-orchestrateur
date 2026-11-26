@@ -1,5 +1,4 @@
 import React from 'react';
-import { AlertTriangle, OctagonAlert } from 'lucide-react';
 import type { SafetyState } from '../types/cell';
 
 interface SafetyBannerProps {
@@ -19,17 +18,15 @@ export const SafetyBanner: React.FC<SafetyBannerProps> = ({ safety }) => {
       role={isFault ? 'alert' : 'status'}
     >
       <div className="safety-banner-main">
-        <span className="safety-banner-icon" aria-hidden="true">
-          {isFault ? <OctagonAlert size={20} /> : <AlertTriangle size={20} />}
+        <span className="safety-alarm-code" aria-hidden="true">
+          {isFault ? 'ALM-AU-13850' : 'ALM-ISO-15066'}
         </span>
         <div>
           <p className="safety-banner-title">{safety.summary}</p>
           <p className="safety-banner-text">{safety.operatorGuidance}</p>
         </div>
       </div>
-      <span className="safety-banner-meta mono">
-        Relevé {safety.lastCheckTimestamp}
-      </span>
+      <span className="safety-banner-meta mono">HORODATAGE {safety.lastCheckTimestamp}</span>
     </div>
   );
 };

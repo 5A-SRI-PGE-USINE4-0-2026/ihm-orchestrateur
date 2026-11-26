@@ -1,9 +1,10 @@
 {
   "cellName": "Cellule Usine 4.0 — Salle 315",
   "facility": "Maison de la Formation Jacqueline Auriol (UPSSITECH SRI)",
-  "readOnly": true,
+  "readOnly": false,
   "defaultMode": "rosbridge",
   "rosbridgeUrl": "ws://localhost:9090",
+  "hmiHttpUrl": "http://localhost:8080",
   "reconnectIntervalMs": 2500,
   "topics": {
     "cellState": "/mfja/supervisor/cell_state",
